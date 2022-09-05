@@ -1,0 +1,1895 @@
+{
+    "name": "Unknown",
+    "version": "1",
+    "data": {
+        "behaviorModules": {
+            "__map": true,
+            "values": [
+                [
+                    "Circle",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "CircleActor",
+                                    "class CircleActor {\n    setup() {\n        if (!this.circling) {\n            this.circling = true;\n            this.step();\n        }\n        this.addEventListener(\"pointerDown\", \"toggle\");\n    }\n\n    step() {\n        if (!this.circling) {return;}\n        this.future(20).step();\n        this.rotateBy([0, 0.01, 0]);\n        this.forwardBy(0.03);\n    }\n\n    toggle() {\n        this.circling = !this.circling;\n        if (this.circling) {\n            this.step();\n        }\n    }\n\n    rotateBy(angles) {\n        let q = Worldcore.q_euler(...angles);\n        q = Worldcore.q_multiply(this.rotation, q);\n        this.rotateTo(q);\n    }\n\n    forwardBy(dist) {\n        let v = Worldcore.v3_rotate([0, 0, dist], this.rotation)\n        this.translateTo([\n            this.translation[0] + v[0],\n            this.translation[1] + v[1],\n            this.translation[2] + v[2]]);\n    }\n\n    teardown() {\n        this.removeEventListener(\"pointerDown\", \"toggle\");\n        this.circling = false;\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "location": "default/demo",
+                        "name": "Circle",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": []
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "Perlin",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "PerlinActor",
+                                    "class PerlinActor {\n    setup() {\n        console.log(\"PerlinActor\");\n        let firstTime = false;\n        if (this.visible === undefined) {\n            firstTime = true;\n            this.visible = false;\n        }\n\n        this.initPerlin(firstTime);\n\n        this.listen(\"hiliteRequest\", \"hilite\");\n        this.listen(\"unhiliteRequest\", \"unhilite\");\n        this.listen(\"showHideRequest\", \"showHide\");\n        this.listen(\"enterHiliteRequest\", \"enterHilite\");\n        this.listen(\"leaveHiliteRequest\", \"leaveHilite\");\n    }\n\n    hilite(_p3d) {\n        this.say(\"hilite\", 0x081808);\n    }\n\n    unhilite(_p3d) {\n        this.say(\"hilite\", 0x000000);\n    }\n\n    enterHilite(_p3d) {\n        this.say(\"hilite\", 0x181808);\n    }\n    leaveHilite(_p3d) {\n        this.say(\"hilite\", 0x000000);\n    }\n\n    initPerlin(firstTime) {\n        this.currentRow = this.rows = 20;\n        this.columns = 20;\n        let d = this.delta = 0.1;\n\n        this.data = [...Array(this.rows).keys()].map(i => {\n            return [...Array(this.columns).keys()].map(j => {\n                return this.call(\"PerlinNoise\", \"noise2D\", i * d, j * d);\n            });\n        });\n\n        if (firstTime) {\n            this.updatePerlin();\n        }\n    }\n\n    updatePerlin() {\n        this.future(100).updatePerlin();\n        if (!this.data) {return;}\n        this.data.shift(); // dump the first row\n        let d = this.delta;\n\n        let row = [...Array(this.columns).keys()].map(i => {\n            return this.call(\"PerlinNoise\", \"noise2D\", this.currentRow * d, i * d);\n        });\n        this.data.push(row);\n        this.currentRow++;\n        this.say(\"updatePerlin\", row);\n\n    }\n\n    showHide() {\n        this.visible = !this.visible;\n        this.say(\"showMe\", this.visible);\n    }\n}"
+                                ],
+                                [
+                                    "PerlinNoise",
+                                    "class PerlinNoise {\n    generateHashTable() {\n        const table = [];\n        this.items = [];\n        for (let n = 0; n < 256; n++) {\n            this.push({key: Math.random(), value: n});\n        }\n        while (!this.isEmpty()) {\n            table.push(this.pop().value);\n        }\n        return table.concat(table);\n    }\n\n    signedNoise2D(x,y) {\n        return this.noise2D(x, y) - 0.5;\n    }\n\n    noise2D(x,y) {\n        if (!this.hashTable) {\n            this.hashTable = this.generateHashTable();\n        }\n\n        const table = this.hashTable;\n        const xInt = Math.floor(x);\n        const yInt = Math.floor(y);\n        const xf = x - xInt;\n        const yf = y - yInt;\n        const u = this.fade(xf);\n        const v = this.fade(yf);\n        const xi = xInt & 0xff;\n        const yi = yInt & 0xff;\n        const aa = table[table[xi    ] + yi];\n        const ab = table[table[xi + 1] + yi];\n        const ba = table[table[xi    ] + yi + 1];\n        const bb = table[table[xi + 1] + yi + 1];\n\n        const aaGrad = this.grad(aa, xf, yf);\n        const abGrad = this.grad(ab, xf - 1, yf);\n        const baGrad = this.grad(ba, xf, yf - 1);\n        const bbGrad = this.grad(bb, xf - 1, yf - 1);\n\n        const lerp0 = this.lerp(aaGrad, abGrad, u);\n        const lerp1 = this.lerp(baGrad, bbGrad, u);\n\n        return (this.lerp(lerp0, lerp1, v) + 1) / 2;\n    }\n\n    lerp(a, b, t) {\n        return a + t * (b - a);\n    }\n\n    fade(t) {\n        return t * t * t * (t * (t * 6 - 15) + 10);\n    }\n\n    grad(hash, x, y) {\n        switch (hash & 0x3) {\n            case 0: return x + y;\n            case 1: return x - y;\n            case 2: return -x + y;\n            case 3: return -x - y;\n            default: return 0;\n        }\n    }\n\n    comparator(a, b){\n        return a.key < b.key;\n    }\n\n    isEmpty() {\n        return (this.items.length === 0);\n    }\n\n    clear() {\n        this.items.length = 0;\n    }\n\n    push(item) {\n        let n = this.items.length;\n        while (n > 0 && !this.comparator(this.items[n >> 1], item)) {\n            this.items[n] = this.items[n >> 1];\n            n >>= 1;\n        }\n        this.items[n] = item;\n    }\n\n    pop() {\n        const top = this.items[0];\n        const last = this.items.pop();\n        if (this.items.length > 0) {\n            this.items[0] = last;\n            this.heapify(0);\n        }\n        return top;\n    }\n\n    traverse(callback) {\n        this.items.forEach(callback);\n    }\n\n    heapify(n) {\n        let m = n;\n        const left = n << 1;\n        const right = left + 1;\n        if (left < this.items.length && this.comparator(this.items[left], this.items[m])) m = left;\n        if (right < this.items.length && this.comparator(this.items[right], this.items[m])) m = right;\n        if (m === n) return;\n        const swap = this.items[n];\n        this.items[n] = this.items[m];\n        this.items[m] = swap;\n        this.heapify(m);\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "location": "default/demo",
+                        "name": "Perlin",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "PerlinPawn",
+                                    "class PerlinPawn {\n    setup() {\n        console.log(\"PerlinPawn\");\n        this.listen(\"updatePerlin\", \"updatePerlin\");\n        this.listen(\"showMe\", \"showMe\");\n        this.listen(\"hilite\", \"hilite\");\n        this.isConstructed = false;\n\n        this.addEventListener(\"pointerDown\", \"onPointerDown\");\n        this.addEventListener(\"pointerUp\", \"onPointerUp\");\n        this.addEventListener(\"pointerEnter\", \"onPointerEnter\");\n        this.addEventListener(\"pointerLeave\", \"onPointerLeave\");\n        this.addEventListener(\"pointerTap\", \"click\");\n        this.addEventListener(\"pointerMove\", \"nop\");\n\n        this.maxHeight = 8;\n        this.barScale = 0.25;\n\n        if (this.perlinGroup) {\n            this.shape.remove(this.perlinGroup);\n            this.perlinGroup = null;\n        }\n\n        if (this.perlinGroup) {\n            this.shape.remove(this.perlinGroup);\n            this.perlinGroup = null;\n        }\n\n        if (this.buttonSphere) {\n            this.shape.remove(this.buttonSphere);\n            this.buttonSphere = null;\n        }\n\n        this.constructPerlin();\n    }\n\n    onPointerDown(p3d) {\n        this.say(\"hiliteRequest\", p3d);\n    }\n    onPointerUp(p3d) {\n        this.say(\"unhiliterequest\", p3d);\n    }\n    onPointerEnter(p3d) {\n        this.say(\"enterHiliteRequest\", p3d);\n    }\n    onPointerLeave(p3d) {\n        this.say(\"leaveHiliteRequest\", p3d);\n    }\n\n    click(_p3d) {\n        this.say(\"showHideRequest\");\n    }\n\n    updatePerlin(row) {\n        const r = this.actor.rows;\n        const s = this.barScale;\n\n        let rg = this.rowGeometry.shift();\n        this.rowGeometry.push(rg);\n        for(let i = 0; i < rg.children.length; i++) {\n            this.setBar(rg.children[i], row[i], r, i);\n        }\n        for(let i = 0; i < r; i++) {\n            this.rowGeometry[i].position.set(0, s / 4, (i - r / 2) * s);\n        }\n    }\n\n    constructPerlin() {\n        const data = this.actor.data;\n        const r = this.actor.rows;\n        const c = this.actor.columns;\n        const s = this.barScale;\n\n        this.perlinGroup = new Worldcore.THREE.Group();\n        this.buttonSphere = new Worldcore.THREE.Mesh(\n            new Worldcore.THREE.SphereGeometry(0.5,32,16),\n            new Worldcore.THREE.MeshStandardMaterial());\n        this.buttonSphere.name = \"buttonSphere\";\n        this.buttonSphere.position.y = 3;\n        this.shape.add(this.buttonSphere);\n\n        this.color = new Worldcore.THREE.Color();\n        this.base = new Worldcore.THREE.Mesh(\n            new Worldcore.THREE.BoxGeometry((r + 2) * s, s / 2, (c + 2) * s, 2, 10, 2),\n            new Worldcore.THREE.MeshStandardMaterial({color: this.color.getHex()}));\n        this.base.position.set(-s / 2, 0, -s / 2);\n        this.bar = new Worldcore.THREE.Mesh(\n            new Worldcore.THREE.BoxGeometry(s, s, s, 1, 10, 1 ),\n            new Worldcore.THREE.MeshStandardMaterial({color: this.color.getHex()}));\n        this.base.layers.enable(1); // use this for raycasting\n        this.base.castShadow = true;\n        this.base.receiveShadow = true;\n        this.perlinGroup.add(this.base);\n\n        this.rowGeometry = [];\n        for(let i = 0; i < r; i++) {\n            let rGroup = new Worldcore.THREE.Group();\n            rGroup.position.set(0, s / 4, (i - r / 2) * s);\n            for ( let j = 0; j < c; j++) {\n                let bar = this.bar.clone();\n                bar.material = bar.material.clone();\n                let d = data[i][j];\n                this.setBar(bar, d, r, j);\n                rGroup.add(bar);\n            }\n            this.rowGeometry.push(rGroup);\n            this.perlinGroup.add(rGroup);\n        }\n        this.showMe(this.actor.visible);\n        this.shape.name = \"perlin\";\n        this.isConstructed = true;\n    }\n\n    setBar(bar, d, rlength, j) {\n        const s = this.barScale;\n        //bar.material.color.setRGB((1-d)/2, 1-d*d, (1+d)/2);\n        let b = Math.cos((1 - d) * Math.PI);\n        b = Math.min(1, (b + 1) / 1.25);\n        let g = Math.sin(d * Math.PI);\n        g = (g + 1) / 2.2;\n        let r = Math.cos(d * Math.PI);\n        r = Math.min(1, (r + 1) / 1.25);\n\n        bar.material.color.setRGB(r, g, b);\n        d = d * this.maxHeight;\n        bar.position.set((j - rlength / 2) * s, s * d / 2, 0);\n        bar.scale.set(1, d, 1);\n    }\n\n    hilite(color) {\n        this.buttonSphere.material.emissive = new Worldcore.THREE.Color(color);\n    }\n\n    showMe(visible) {\n        if (visible) {\n            this.shape.add(this.perlinGroup);\n        } else {\n            this.shape.remove(this.perlinGroup);\n        }\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "Light",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": []
+                        },
+                        "location": "default/lights",
+                        "name": "Light",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "LightPawn",
+                                    "class LightPawn {\n    setup() {\n        console.log(\"LightPawn\");\n        let trm = this.service(\"ThreeRenderManager\");\n        let scene =  trm.scene;\n        let camera = trm.camera;\n        let group = this.shape;\n\n        this.removeLights();\n\n        this.setupCSM(scene, camera, Worldcore.THREE);\n\n        const ambient = new Worldcore.THREE.AmbientLight( 0xffffff, .5 );\n        group.add(ambient);\n        this.lights.push(ambient);\n\n        this.constructBackground(this.actor._cardData);\n\n        let moduleName = this._behavior.module.externalName;\n        this.addUpdateRequest([`${moduleName}$LightPawn`, \"update\"]);\n\n        this.listen(\"updateShape\", \"updateShape\");\n    }\n\n    removeLights() {\n        if (this.lights) {\n            this.lights.forEach((light) => {\n                this.shape.remove(light);\n            });\n        }\n        this.lights = [];\n    }\n\n    teardown() {\n        console.log(\"teardown lights\");\n        if(this.background)this.background.dispose();\n        this.removeLights();\n    }\n\n    updateShape(options) {\n        this.constructBackground(options);\n    }\n\n    constructBackground(options) {\n        let assetManager = this.service(\"AssetManager\").assetManager;\n        let dataType = options.dataType;\n        if (!options.dataLocation) {return;}\n        return this.getBuffer(options.dataLocation).then((buffer) => {\n            return assetManager.load(buffer, dataType, Worldcore.THREE, options).then((texture) => {\n                let TRM = this.service(\"ThreeRenderManager\");\n                let renderer = TRM.renderer;\n                let scene = TRM.scene;\n                let pmremGenerator = new Worldcore.THREE.PMREMGenerator(renderer);\n                pmremGenerator.compileEquirectangularShader();\n\n                let exrCubeRenderTarget = pmremGenerator.fromEquirectangular(texture);\n                let exrBackground = exrCubeRenderTarget.texture;\n\n                let bg = scene.background;\n                let e = scene.environment;\n                scene.background = exrBackground;\n                scene.environment = exrBackground;\n                if(e !== bg) if(bg) bg.dispose();\n                if(e) e.dispose();\n                texture.dispose();\n            });\n        });\n    }\n\n    setupCSM(scene, camera, THREE) {\n        if (this.csm) {\n            this.csm.remove();\n            this.csm = null;\n        }\n\n        let dir = new THREE.Vector3(-2,-2,-0.5);\n        this.csm = new THREE.CSM({\n            fade: true,\n            far: camera.far,\n            maxFar: 1000,\n            cascades: 3,\n            shadowMapSize: 2048,\n            shadowbias: 0.00025,\n            lightDirection: dir,\n            camera: camera,\n            parent: scene,\n            lightIntensity: 0.6,\n            lightFar: 1000,\n            mode: \"practical\"\n        });\n        this.csm.update();\n    }\n\n    update(_time) {\n        if(this.csm) this.csm.update();\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "BouncingBall",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "BouncingLogoActor",
+                                    "class BouncingLogoActor {\n    setup() {\n        this.SPEED = 10;\n        this.position = [512, 512];\n        this.ballVelocity = this.randomVelocity();\n        this.radius = (512 - 64) * (512 - 64);\n        this.listen(\"set\", this.setPosition);\n        this.future(100).bounce();\n    }\n\n    randomVelocity() {\n        const r = this.random() * 2 * Math.PI;\n        return [Math.cos(r) * this.SPEED, Math.sin(r) * this.SPEED];\n    }\n\n    bounce() {\n        let px = this.position[0], py = this.position[1];\n        let vel = this.ballVelocity;\n        px += vel[0];\n        py += vel[1];\n        let dx = px - 512;\n        let dy = py - 512;\n        if(dx * dx + dy * dy > this.radius) {\n            dx = dx > 0 ? -1 : 1;\n            dy = dy > 0 ? -1 : 1;\n            this.ballVelocity = this.randomVelocity();\n            this.ballVelocity[0] = Math.abs(this.ballVelocity[0]) * dx;\n            this.ballVelocity[1] = Math.abs(this.ballVelocity[1]) * dy;\n        }\n        this.updatePosition([px, py]);\n        this.future(50).bounce();\n    }\n\n    updatePosition(p) {\n        this.position[0] = p[0];\n        this.position[1] = p[1];\n        this.say(\"updatePosition\", this.position);\n    }\n\n    setPosition(uv) {\n        let p = this.uv2xy(uv);\n        this.updatePosition(p);\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "location": "default/bouncingBall",
+                        "name": "BouncingBall",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "BouncingLogoPawn",
+                                    "class BouncingLogoPawn {\n    setup() {\n        this.updatePosition(this.actor.position);\n        this.listen(\"updatePosition\", \"updatePosition\");\n        this.addEventListener(\"pointerDown\", \"onPointerDown\");\n        this.addEventListener(\"pointerMove\", \"onPointerMove\");\n        let image = new Image();\n        image.src = \"./assets/SVG/CroquetSymbol_CMYK_NoShadow.svg\";\n        image.onload = () => {\n            this.image = image;\n        }\n    }\n\n    updatePosition(pos) {\n        this.dynamic.clear();\n        if(this.image) {\n            this.dynamic.drawImage(this.image, pos[0] - 64, pos[1] - 64, 128, 128);\n        }\n    }\n\n    onPointerDown(p3d) {\n        this.say(\"set\", p3d.uv);\n    }\n\n    onPointerMove(p3d) {\n        this.say(\"set\", p3d.uv);\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "BitcoinTracker",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "BitcoinTrackerActor",
+                                    "class BitcoinTrackerActor {\n    setup() {\n        if (!this.history) {\n            this.history = [{ date: 0, amount: 0 }];\n        }\n        this.listen(\"BTC-USD\", \"onBitcoinData\");\n        this.listen(\"BTC-USD-history\", \"onBitcoinHistory\");\n    }\n\n    latest() {\n        return this.history[this.history.length - 1];\n    }\n\n    onBitcoinData({date, amount}) {\n        // Adds a new entry if it is more than 1000 miliiseconds after\n        // the last data point, and publishes value-change event.\n        if (date - this.latest().date < 1000) return;\n        this.addEntries({date, amount});\n        this.say(\"value-changed\", amount);\n    }\n\n    onBitcoinHistory(prices) {\n        const newer = prices.filter(p => p.date - this.latest().date > 25000);\n        this.addEntries(...newer);\n        this.publish(this.id, \"value-init\", newer.map(v=>v.amount));\n    }\n\n    addEntries(...data) {\n        this.history.push(...data);\n        if (this.history[0].date === 0) {this.history.shift();}\n        if (this.history.length > 300) {this.history.shift();}\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "location": "default/bitcoinTracker",
+                        "name": "BitcoinTracker",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "BitcoinTrackerPawn",
+                                    "class BitcoinTrackerPawn {\n    setup() {\n        this.lastAmount = 0;\n        this.listen(\"value-changed\", \"onBTCUSDChanged\");\n\n        this.onBTCUSDChanged();\n\n        // Those two messages are sent from the Elected module.\n        // When handleElected is sent, it signifies that it newly becomes a leader.\n        // When handleUnelected is sent, it signifies that it is not a leader anymore.\n        this.listen(\"handleElected\", \"handleElected\");\n        this.listen(\"handleUnelected\", \"handleUnelected\");\n\n        // Upon start up, this message query the current status from the Elected module.\n        this.say(\"electionStatusRequested\");\n    }\n\n    /*\n      When this peer is elected, this creates a socket.\n\n      When data is undefined, it is a result from electionStatusRequested.\n      When data and data.to is filled with the elected viewId.\n    */\n    handleElected(data) {\n        if (!data || data.to === this.viewId) {\n            console.log(\"bitcoin elected\");\n            this.fetchHistory().then(() => this.openSocket());\n        }\n    }\n\n    /*\n      When this peer is unelected.\n    */\n    handleUnelected() {\n        console.log(\"bitcoin unelected\");\n        this.closeSocket();\n    }\n\n    openSocket() {\n        this.closeSocket();\n\n        const host = \"wss://ws.sfox.com/ws\";\n        const sub_msg = {\"type\": \"subscribe\", \"feeds\": [\"ticker.sfox.btcusd\"]};\n\n        this.socket = new WebSocket(host);\n\n        this.socket.onopen = () => {\n            this.socket.send(JSON.stringify(sub_msg));\n        };\n\n        this.socket.onmessage = (evt) => {\n            let last;\n            try {\n                last = JSON.parse(evt.data).payload.last;\n            } catch(e) {\n                console.log(\"invalid data\");\n            }\n            if (last !== undefined) {\n                this.say(\"BTC-USD\", { date: Date.now(), amount: +last });\n            }\n        }\n    }\n\n    closeSocket() {\n        if (this.socket) {\n            this.socket.close();\n        }\n    }\n\n    latest() {\n        return this.actorCall(\"BitcoinTrackerActor\", \"latest\");\n    }\n\n    /*\n      At the initialization time, we fetch more data via an http end point.\n    */\n    fetchHistory() {\n        console.log(\"Fetching BTC-USD history from Coinbase...\");\n        return fetch(`https://api.coinbase.com/v2/prices/BTC-USD/historic?period=day`).then((response) => {\n            return response.json();\n        }).then((json) => {\n            const prices = json.data.prices.map(price => ({ date: +new Date(price.time), amount: +price.price }));\n            console.log(\"fetched %s prices\", prices.length);\n            const newer = prices.filter(price => price.date > this.latest().date).slice(0, 20);\n            newer.sort((a, b) => a.date - b.date);\n            console.log(\"publishing %s latest prices\", newer.length);\n            this.say(\"BTC-USD-history\", newer);\n        });\n    }\n\n    /*\n      The card that has this module is expected to be \"2d\" type with textureType: \"canvas\".\n      this.canvas is the DOM canvas element.\n      The setColor event at the end informs other related pawns to change their color,\n      thus using the view's id as scope.\n    */\n\n    onBTCUSDChanged() {\n        //console.log(\"changed\");\n        // this is called on all views, not just the elected one\n        let amount = this.latest().amount;\n        if(this.lastAmount === amount) return;\n        let color = this.lastAmount > amount ? \"#FF2222\" : \"#22FF22\";\n        this.lastAmount = amount;\n\n        this.clear(\"#222222\");\n        let ctx = this.canvas.getContext(\"2d\");\n        ctx.textAlign = \"right\";\n        ctx.fillStyle = color;\n\n        ctx.font = \"40px Arial\";\n        ctx.fillText(\"BTC-USD\", this.canvas.width - 40, 85);\n\n        ctx.textAlign = \"center\";\n        ctx.font = \"90px Arial\";\n        ctx.fillText(\"$\" + amount.toFixed(2), this.canvas.width / 2, 100); //50+this.canvas.height/2);\n        this.texture.needsUpdate = true;\n        this.publish(this.id, \"setColor\", color);\n    }\n\n    clear(fill) {\n        let ctx = this.canvas.getContext(\"2d\");\n        ctx.fillStyle = fill;\n        ctx.fillRect( 0, 0, this.canvas.width, this.canvas.height );\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "BarGraph",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "BarGraphActor",
+                                    "class BarGraphActor {\n    setup() {\n        if (this._cardData.values === undefined) {\n            this._cardData.values = [];\n            this._cardData.length = 20;\n            this._cardData.height = 0.5;\n        }\n        this.subscribe(this.parent.id, \"value-changed\", this.updateBars);\n        this.subscribe(this.parent.id, \"value-init\", this.initBars);\n    }\n\n    length() {\n        return this._cardData.length;\n    }\n\n    height() {\n        return this._cardData.height;\n    }\n\n    values() {\n        return this._cardData.values;\n    }\n\n    updateBars(value, notSay) {\n        let values = this._cardData.values;\n        values.push(value);\n        if (values.length > this.length()) {\n            values.shift();\n        }\n\n        if (!notSay) {\n            this.say(\"updateGraph\");\n        }\n    }\n\n    initBars(values) {\n        values.forEach((value) => this.updateBars(value, true));\n        this.say(\"updateGraph\");\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "location": "default/bitcoinTracker",
+                        "name": "BarGraph",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "BarGraphPawn",
+                                    "class BarGraphPawn {\n    setup() {\n        this.constructBars();\n        this.listen(\"updateGraph\", \"updateGraph\");\n        this.subscribe(this.parent.id, \"setColor\", \"setColor\");\n        this.updateGraph();\n        this.removeEventListener(\"pointerWheel\", \"onPointerWheel\");\n    }\n\n    constructBars() {\n        this.shape.children.forEach((c) => {\n            c.material.dispose();\n            this.shape.remove(c);\n        });\n        // I don't know why the above does not actually remove children\n        this.shape.children = [];\n        this.bars = [];\n        let len = this.actor._cardData.length;\n        let size = 1 / len;\n        let THREE = Worldcore.THREE;\n        let color = this.actor._cardData.color;\n        this.base = new THREE.Mesh(\n            new THREE.BoxGeometry(1, size / 4, size, 2, 4, 2 ),\n            new THREE.MeshStandardMaterial());\n        this.base.position.set(0, -size / 4, 0);\n        this.shape.add(this.base);\n        this.bar = new THREE.Mesh(\n            new THREE.BoxGeometry(size * 0.8, 1, size * 0.8, 2, 2, 2 ),\n            new THREE.MeshStandardMaterial({color: color, emissive: color}));\n        for(let i = 0; i < len; i++) {\n            let bar = this.bar.clone();\n            bar.material = bar.material.clone();\n            bar.position.set((0.5 + i - len / 2) * size, 0,0);\n            this.shape.add(bar);\n            this.bars.push(bar);\n        }\n    }\n\n    setColor(color) {\n        let c = new Worldcore.THREE.Color(color);\n        this.base.material.color = c;\n        this.base.material.emissive = c;\n    }\n\n    updateGraph(){\n        let values = this.actor._cardData.values;\n        let height = this.actor._cardData.height;\n        let mn = Math.min(...values);\n        let mx = Math.max(...values);\n        let range = mx - mn;\n        mn = Math.max(mn - range / 10,0);\n        range = mx - mn; //update this with the additional bit\n\n\n        this.bars.forEach((b, i) => {\n            let d = height * (values[i] - mn) / range;\n            b.scale.set(1,d,1);\n            b.position.y = d / 2;\n        });\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "BitLogo",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": []
+                        },
+                        "location": "default/bitcoinTracker",
+                        "name": "BitLogo",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "BitLogoPawn",
+                                    "class BitLogoPawn {\n    setup() {\n        // this is a case where a method of the base object is called.\n        this.subscribe(this.parent.id, \"setColor\", \"setColor\");\n        this.removeEventListener(\"pointerWheel\", \"onPointerWheel\");\n    }\n\n    setColor(color) {\n        if (color === this.lastColor) {return;}\n        let material = this.makePlaneMaterial(this.actor._cardData.depth, color, this.actor._cardData.frameColor, false);\n        let obj = this.shape.children.find((o) => o.name === \"2d\");\n        if (!obj || !obj.children || obj.children.length === 0) {return;}\n        obj = obj.children[0];\n        obj.material = material;\n        this.lastColor = color;\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "Spin",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "SpinActor",
+                                    "class SpinActor {\n    setup() {\n        this.listen(\"startSpinning\", \"startSpinning\");\n        this.listen(\"stopSpinning\", \"stopSpinning\");\n        this.listen(\"newAngle\", \"newAngle\");\n    }\n\n    startSpinning(spin) {\n        this.isSpinning = true;\n        this.qSpin = Worldcore.q_euler(0, spin, 0);\n        this.doSpin();\n    }\n\n    doSpin() {\n        if(this.isSpinning) {\n            this.rotateTo(Worldcore.q_multiply(this._rotation, this.qSpin));\n            this.future(50).doSpin();\n        }\n    }\n\n    stopSpinning() {\n        this.isSpinning = false;\n    }\n\n    newAngle(newAngle) {\n        this.publish(\"scope\", \"newAngle\", newAngle);\n    }\n\n    teardown() {\n        delete this.isSpinning;\n        this.unsubscribe(this.id, \"startSpinning\");\n        this.unsubscribe(this.id, \"stopSpinning\");\n        this.unsubscribe(this.id, \"newAngle\");\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "location": "default/spin",
+                        "name": "Spin",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "SpinPawn",
+                                    "class SpinPawn {\n    setup() {\n        this.addEventListener(\"pointerDown\", \"onPointerDown\");\n        this.addEventListener(\"pointerUp\", \"onPointerUp\");\n        this.addEventListener(\"pointerMove\", \"onPointerMove\");\n    }\n\n    theta(xyz) {\n        // As the thing itself rotates, we need to get the \"theta\" in global.\n        let origin = this.translation;\n        return (Math.atan2(origin[2] - xyz[2], xyz[0] - origin[0]) + Math.PI * 2) % (Math.PI * 2);\n    }\n\n    onPointerDown(p3d) {\n        this.moveBuffer = [];\n        this.say(\"stopSpinning\");\n        this._startDrag = p3d.xy;\n        this._baseRotation = this._rotation;\n        let avatar = Worldcore.GetPawn(p3d.avatarId);\n        avatar.addFirstResponder(\"pointerMove\", {}, this);\n    }\n\n    onPointerMove(p3d) {\n        this.moveBuffer.push(p3d.xy);\n        this.deltaAngle = (p3d.xy[0] - this._startDrag[0]) / 2 / 180 * Math.PI;\n        let newRot = Worldcore.q_multiply(this._baseRotation, Worldcore.q_euler(0, this.deltaAngle, 0));\n        this.rotateTo(newRot);\n        this.say(\"newAngle\", this.deltaAngle);\n        if (this.moveBuffer.length >= 3) {\n            setTimeout(() => this.shiftMoveBuffer(), 100);\n        }\n    }\n\n    shiftMoveBuffer() {\n        this.moveBuffer.shift();\n    }\n\n    onPointerUp(p3d) {\n        let avatar = Worldcore.GetPawn(p3d.avatarId);\n        avatar.removeFirstResponder(\"pointerMove\", {}, this);\n        this.moveBuffer.push(p3d.xy);\n\n        this._startDrag = null;\n        this._baseRotation = null;\n\n        if (this.moveBuffer.length < 3) {return;}\n\n        this.moveBuffer = this.moveBuffer.slice(this.moveBuffer.length - 3);\n\n        let signs = new Set();\n        for (let i = 0; i < this.moveBuffer.length - 1; i++) {\n            signs.add(Math.sign(this.moveBuffer[i + 1][0] - this.moveBuffer[i][0]));\n        }\n        if (signs.has(-1) && signs.has(1)) {return;}\n\n        this.deltaAngle = (this.moveBuffer[this.moveBuffer.length - 1][0] - this.moveBuffer[0][0]) / 2 / 180 * Math.PI;\n\n        if (Math.abs(this.deltaAngle) > 0.01) {\n            let a = this.deltaAngle;\n            a = Math.min(Math.max(-0.1, a), 0.1);\n            this.say(\"startSpinning\", a);\n        }\n    }\n\n    teardown() {\n        this.removeEventListener(\"pointerDown\", \"onPointerDown\");\n        this.removeEventListener(\"pointerUp\", \"onPointerUp\");\n        this.removeEventListener(\"pointerMove\", \"onPointerMove\");\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "Pendulum",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "PendulumActor",
+                                    "class PendulumActor {\n    setup() {\n        let d = 10;\n        this.removeObjects();\n        this.links = [...Array(d).keys()].map((i) => {\n            let kinematic;\n            if (i === 0) {\n                kinematic = Worldcore.RAPIER.RigidBodyDesc.newKinematicPositionBased();\n            } else {\n                kinematic = Worldcore.RAPIER.RigidBodyDesc.newDynamic();\n            }\n\n            let card;\n            let translation = [0, 0 - i * 2, 0];\n            let name = `link${i}`;\n            if (i === d - 1) {\n                card = this.createCard({\n                    type: \"3d\",\n                    dataLocation: \"3_EGjDfsBvE93taoFG1Uq6hS6MtH_JMHT33IaSwpij0gR1tbX1wVAABJRkNKXAFaXAFMXUBeWkpbAUZAAFoAaEt5TVZDZlxuRH5MbXdLHGhXTllWWHpkeHZ2HQBGQAFMXUBeWkpbAUJGTF1AWUpdXEoATHBmAldHRFZ5Wn9NYnpJSktgZVpESmRBRHt2YW1fYnV4W3gZXh1iRGQeegBLTltOAF1ment6SR0dQGhFHhhZfE1KYxdeGm12d1dCVUldf3pYaEoWRFoaSVlZF2I\",\n                    modelType: \"glb\",\n                    translation,\n                    name,\n                    parent: this,\n                    pendulumProto: true,\n                    pendulumHandlesEvent: true,\n                    behaviorModules: [\"Rapier\", \"PendulumLink\"],\n                    noSave: true,\n                });\n            } else {\n                card = this.createCard({\n                    type: \"object\",\n                    translation,\n                    name,\n                    color: this._cardData.color,\n                    parent: this,\n                    behaviorModules: [\"Rapier\", \"PendulumLink\"],\n                    noSave: true,\n                });\n            }\n            card.call(\"Rapier$RapierActor\", \"createRigidBody\", kinematic);\n\n            let s = [0.1, 1];\n            s = [s[1] / 2, s[0]];\n            let cd = Worldcore.RAPIER.ColliderDesc.cylinder(...s);\n\n            cd.setRestitution(0.5);\n            cd.setFriction(1);\n\n            if (i === d - 1) {\n                cd.setDensity(10);\n            } else {\n                cd.setDensity(1.5);\n            }\n\n            card.call(\"Rapier$RapierActor\", \"createCollider\", cd);\n            return card;\n        });\n\n        this.joints = [...Array(d - 1).keys()].map((i) => {\n            let card = this.createCard({\n                type: \"object\",\n                name: `joint${i}`,\n                parent: this,\n                behaviorModules: [\"Rapier\"],\n                noSave: true,\n            });\n            card.call(\n                \"Rapier$RapierActor\", \"createImpulseJoint\", \"ball\", this.links[i], this.links[i + 1],\n                {x: 0, y: -1, z: 0}, {x: 0, y: 1, z: 0}\n            );\n            // card.future(3000).destroy();\n            return card;\n        });\n\n        this.jointProto = this.createCard({\n            type: \"object\",\n            name,\n            pendulumProto: true,\n            parent: this,\n            behaviorModules: [\"PendulumLink\"],\n        });\n    }\n\n    removeObjects() {\n        if (this.links) {\n            this.links.forEach(l => l.destroy());\n            this.links = null;\n        }\n        if (this.joints) {\n            this.joints.forEach(j => j.destroy());\n            this.joints = null;\n        }\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "location": "default/pendulum",
+                        "name": "Pendulum",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "PendulumPawn",
+                                    "class PendulumPawn {\n    setup() {\n        if (this.obj) {\n            this.shape.children.forEach((o) => this.shape.remove(o));\n            this.shape.children = [];\n            this.obj.dispose();\n            this.obj = null;\n        }\n\n        let geometry = new Worldcore.THREE.BoxGeometry(0.5, 0.5, 0.5);\n        let material = new Worldcore.THREE.MeshStandardMaterial({color: this.actor._cardData.color || 0xee8888});\n        this.obj = new Worldcore.THREE.Mesh(geometry, material);\n        this.obj.castShadow = this.actor._cardData.shadow;\n        this.obj.receiveShadow = this.actor._cardData.shadow;\n\n        this.shape.add(this.obj);\n\n        this.removeEventListener(\"pointerDoubleDown\", \"onPointerDoubleDown\");\n        this.addEventListener(\"pointerDoubleDown\", \"nop\");\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "PendulumLink",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "PendulumLinkActor",
+                                    "class PendulumLinkActor {\n    setup() {\n        if (this._cardData.pendulumHandlesEvent) {\n            this.addEventListener(\"pointerTap\", \"jolt\");\n        }\n    }\n\n    jolt(p3d) {\n        // Apply an upward force and random spin.\n        if (!p3d.normal) {return;}\n        let r = this.rigidBody;\n        if (!r) {return;}\n\n        let jolt = Worldcore.v3_scale(p3d.normal, -40);\n        r.applyForce({x: jolt[0], y: jolt[1], z: jolt[2]}, true);\n    }\n\n    teardown() {\n        this.removeEventListener(\"pointerTap\", \"jolt\");\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "location": "default/pendulum",
+                        "name": "PendulumLink",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "PendulumLinkPawn",
+                                    "class PendulumLinkPawn {\n    setup() {\n        /*\n          Creates a Three.JS mesh based on the specified rapierShape and rapierSize.\n\n          For a demo purpose, it does not override an existing shape\n          (by checking this.shape.children.length) so that the earth\n          shape created by FlightTracker behavior is preserved.\n\n          Uncomment the cyclinder case to add the cylinder shape.\n\n        */\n        this.removeEventListener(\"pointerDoubleDown\", \"onPointerDoubleDown\");\n        this.addEventListener(\"pointerDoubleDown\", \"nop\");\n\n        if (this.actor._cardData.pendulumProto) {return;}\n        this.shape.children.forEach((c) => this.shape.remove(c));\n        this.shape.children = [];\n\n        let s = [0.1, 2.3];\n        let geometry = new Worldcore.THREE.CylinderGeometry(s[0], s[0], s[1], 20);\n        let material = new Worldcore.THREE.MeshStandardMaterial({color: this.actor._cardData.color || 0xcccccc, metalness: 0.6});\n        this.obj = new Worldcore.THREE.Mesh(geometry, material);\n        this.obj.castShadow = this.actor._cardData.shadow;\n        this.obj.receiveShadow = this.actor._cardData.shadow;\n\n        this.shape.add(this.obj);\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ],
+                [
+                    "OpenRefineryPortalButton",
+                    {
+                        "actorBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "OpenRefineryPortalActor",
+                                    "class OpenRefineryPortalActor {\n    setup() {\n        this.addEventListener(\"pointerTap\", \"pressed\");\n    }\n\n    check() {\n        let cards = this.queryCards({methodName: \"isPortal\"}, this);\n        this.hasOpened = cards.length > 0;\n    }\n\n    isPortal(card) {\n        return card.layers.includes(\"portal\");\n    }\n\n    pressed() {\n        this.check();\n        if (this.hasOpened) {return;}\n        this.hasOpened = true;\n\n        this.createCard({\n            translation: [-12, -0.4, -10.2],\n            rotation: [0, -1.5707963267948966, 0],\n            layers: [\"pointer\", \"portal\"],\n            className: \"PortalActor\",\n            color: 16737996,\n            cornerRadius: 0.05,\n            depth: 0.05,\n            frameColor: 8947848,\n            portalURL: \"?world=refinery\",\n            type: \"2d\",\n            width: 1.8,\n            height: 2.4,\n        });\n\n        this.say(\"portalChanged\");\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "location": "default/openPortal",
+                        "name": "OpenRefineryPortalButton",
+                        "pawnBehaviors": {
+                            "__map": true,
+                            "values": [
+                                [
+                                    "OpenRefineryPortalPawn",
+                                    "class OpenRefineryPortalPawn {\n    setup() {\n        this.addEventListener(\"pointerMove\", \"nop\");\n        this.addEventListener(\"pointerEnter\", \"hilite\");\n        this.addEventListener(\"pointerLeave\", \"unhilite\");\n        this.makeButton();\n        this.listen(\"portalChanged\", \"setColor\");\n    }\n\n    setColor() {\n        let baseColor = !this.actor.hasOpened\n            ? (this.entered ? 0xeeeeee : 0xcccccc)\n            : 0x22ff22;\n\n        if (this.shape.children[0] && this.shape.children[0].material) {\n            this.shape.children[0].material.color.setHex(baseColor);\n        }\n    }\n\n    makeButton() {\n        this.shape.children.forEach((c) => this.shape.remove(c));\n        this.shape.children = [];\n\n        let geometry = new Worldcore.THREE.SphereGeometry(0.15, 16, 16);\n        let material = new Worldcore.THREE.MeshStandardMaterial({color: 0xcccccc, metalness: 0.8});\n        let button = new Worldcore.THREE.Mesh(geometry, material);\n        this.shape.add(button);\n        this.setColor();\n    }\n\n    hilite() {\n        this.entered = true;\n        this.setColor();\n    }\n\n    unhilite() {\n        this.entered = false;\n        this.setColor();\n    }\n}"
+                                ]
+                            ]
+                        },
+                        "systemModule": false
+                    }
+                ]
+            ]
+        },
+        "cards": [
+            {
+                "card": {
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "entrance",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "spawn": "default",
+                    "translation": [
+                        -12,
+                        -0.4,
+                        -10.2
+                    ],
+                    "type": "object"
+                },
+                "id": "0001"
+            },
+            {
+                "card": {
+                    "dataLocation": "./assets/3D/artgallery_042122.glb.zip",
+                    "dataScale": [
+                        1,
+                        1,
+                        1
+                    ],
+                    "layers": [
+                        "walk"
+                    ],
+                    "name": "world model",
+                    "placeholder": true,
+                    "placeholderColor": 8421504,
+                    "placeholderOffset": [
+                        0,
+                        0,
+                        0
+                    ],
+                    "placeholderSize": [
+                        400,
+                        0.1,
+                        400
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        0,
+                        -1.7,
+                        0
+                    ],
+                    "type": "3d"
+                },
+                "id": "0002"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "Light"
+                    ],
+                    "dataLocation": "./assets/sky/shanghai_riverside_2k.exr",
+                    "dataType": "exr",
+                    "layers": [
+                        "light"
+                    ],
+                    "name": "light",
+                    "type": "lighting"
+                },
+                "id": "0003"
+            },
+            {
+                "card": {
+                    "color": 12303291,
+                    "cornerRadius": 0.05,
+                    "depth": 0.05,
+                    "frameColor": 13421772,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "image card",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "textureLocation": "./assets/images/CroquetLogo_RGB.jpg",
+                    "textureType": "image",
+                    "translation": [
+                        12,
+                        0.6,
+                        -10
+                    ],
+                    "type": "2d"
+                },
+                "id": "0004"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "BouncingBall"
+                    ],
+                    "color": 16777215,
+                    "dataLocation": "./assets/SVG/full-circle.svg",
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "fullBright": true,
+                    "height": 1,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "bouncinglogo",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        3,
+                        3,
+                        3
+                    ],
+                    "textureHeight": 1024,
+                    "textureType": "dynamic",
+                    "textureWidth": 1024,
+                    "translation": [
+                        12,
+                        0.6,
+                        11
+                    ],
+                    "type": "2d",
+                    "width": 1
+                },
+                "id": "0005"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "Elected",
+                        "BitcoinTracker"
+                    ],
+                    "cornerRadius": 0.1,
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "height": 0.75,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "bitcointracker",
+                    "rotation": [
+                        0,
+                        0,
+                        0,
+                        1
+                    ],
+                    "scale": [
+                        3,
+                        3,
+                        3
+                    ],
+                    "textureHeight": 768,
+                    "textureType": "canvas",
+                    "textureWidth": 1024,
+                    "translation": [
+                        -5,
+                        0.6,
+                        -16.87
+                    ],
+                    "type": "2d",
+                    "width": 1
+                },
+                "id": "0006"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "BitLogo"
+                    ],
+                    "color": 16777215,
+                    "dataLocation": "./assets/SVG/BitcoinSign.svg",
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "bitlogo",
+                    "parent": "0006",
+                    "scale": [
+                        0.25,
+                        0.25,
+                        0.25
+                    ],
+                    "translation": [
+                        -0.35,
+                        0.35,
+                        0.1
+                    ],
+                    "type": "2d"
+                },
+                "id": "0007"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "BarGraph"
+                    ],
+                    "color": 15658734,
+                    "frameColor": 8947848,
+                    "height": 0.5,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "length": 20,
+                    "name": "bar graph",
+                    "parent": "0006",
+                    "translation": [
+                        0,
+                        -0.3,
+                        0.1
+                    ],
+                    "type": "object",
+                    "values": [
+                        20890.68,
+                        20894.8,
+                        20894.4,
+                        20899.19,
+                        20890.21,
+                        20895.34,
+                        20892.77,
+                        20896.61,
+                        20905.25,
+                        20905.16,
+                        20904.12,
+                        20902.65,
+                        20902.02,
+                        20902.86,
+                        20907.8,
+                        20915.55,
+                        20907.49449826,
+                        20919.55,
+                        20918.59,
+                        20914.19
+                    ]
+                },
+                "id": "0008"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "OpenRefineryPortalButton"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "portal button",
+                    "translation": [
+                        -12.1,
+                        1.3,
+                        -10.17839395666378
+                    ],
+                    "type": "object"
+                },
+                "id": "0009"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/22.05.23 Croquet AWE Presentation.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/22.05.23 Croquet AWE Presentation.pdf",
+                    "pdfLocation": "30zU7vniWF26Egbynrz8yyHD0fxWZ_FQC2-_h4Aqo768WEREQEMKHx9WWVxVQx5FQx5TQl9BRVVEHllfH0Ufd1RmUklceUNxW2FTcmhUA3dIUUZJR2V7Z2lpAh9ZXx5TQl9BRVVEHl1ZU0JfRlVCQ1UfHQhbQgABCXxJZERhU2kGfF5famIdWVFjeQUESV9de3p0AG9dCQRUd2NpeR9UUURRHwUJXmlkSmdpeWUFeVZIAAdBAXl3fGBYXgZDWWVvdGcJVVt8d19FdgMBUVM",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        11.914606500892997,
+                        0.4,
+                        0.25
+                    ],
+                    "type": "2d"
+                },
+                "id": "0010"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "Rapier",
+                        "Pendulum"
+                    ],
+                    "color": 11167334,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "pendulum",
+                    "scale": [
+                        0.2,
+                        0.2,
+                        0.2
+                    ],
+                    "translation": [
+                        -0.03701975732147922,
+                        3.2368919013826734,
+                        8.444841625884546
+                    ],
+                    "type": "object"
+                },
+                "id": "0011"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PendulumLink"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "parent": "0011",
+                    "pendulumProto": true,
+                    "type": "object"
+                },
+                "id": "0012"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/ADA062925.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/ADA062925.pdf",
+                    "pdfLocation": "354SVBbrwwpeK5SpsnYNrf1juA5BcAtqy8m9nhfT-1QsXUFBRUYPGhpTXFlQRhtARhtWR1pEQFBBG1xaGkAaT1EDBk95BGdxYFNHeV9ddnBTRWYDXnJPAGwCBhpWWlgbWFAbR1RZUxtXVEdeWkIbWFxWR1pDUEdGUBoGeVN3UgZ7Anh4Yl19GEAFWEBEXkJ3cG1kAmpGbG9RVkZwbVheYgJUUndkGlFUQVQaWltAZGJDRUVHYXoFZGZQU1JiUUZZbUZbRH1PAnkFTFRXU30ABXZjA1tUQg",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        -4,
+                        -3.8073204741280153,
+                        -6.9665257669409755
+                    ],
+                    "type": "2d"
+                },
+                "id": "0013"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/ADA062925.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/ADA062925.pdf",
+                    "pdfLocation": "354SVBbrwwpeK5SpsnYNrf1juA5BcAtqy8m9nhfT-1QsXUFBRUYPGhpTXFlQRhtARhtWR1pEQFBBG1xaGkAaT1EDBk95BGdxYFNHeV9ddnBTRWYDXnJPAGwCBhpWWlgbWFAbR1RZUxtXVEdeWkIbWFxWR1pDUEdGUBoGeVN3UgZ7Anh4Yl19GEAFWEBEXkJ3cG1kAmpGbG9RVkZwbVheYgJUUndkGlFUQVQaWltAZGJDRUVHYXoFZGZQU1JiUUZZbUZbRH1PAnkFTFRXU30ABXZjA1tUQg",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        -4.000000000000002,
+                        -4.147868108328447,
+                        -7.059013182017066
+                    ],
+                    "type": "2d"
+                },
+                "id": "0014"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PendulumLink"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "parent": "0011",
+                    "pendulumProto": true,
+                    "type": "object"
+                },
+                "id": "0015"
+            },
+            {
+                "card": {
+                    "className": "PortalActor",
+                    "color": 16737996,
+                    "cornerRadius": 0.05,
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "height": 2.4,
+                    "layers": [
+                        "pointer",
+                        "portal"
+                    ],
+                    "portalURL": "?world=refinery&q=pp1s83gx7n#pw=cyQ59tpUm-Hu4yqz0WmKQQ",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "translation": [
+                        -12,
+                        -0.4,
+                        -10.2
+                    ],
+                    "type": "2d",
+                    "width": 1.8
+                },
+                "id": "0016"
+            },
+            {
+                "card": {
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "entrance",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "spawn": "default",
+                    "translation": [
+                        -12,
+                        -0.4,
+                        -10.2
+                    ],
+                    "type": "object"
+                },
+                "id": "0017"
+            },
+            {
+                "card": {
+                    "dataLocation": "./assets/3D/artgallery_042122.glb.zip",
+                    "dataScale": [
+                        1,
+                        1,
+                        1
+                    ],
+                    "layers": [
+                        "walk"
+                    ],
+                    "name": "world model",
+                    "placeholder": true,
+                    "placeholderColor": 8421504,
+                    "placeholderOffset": [
+                        0,
+                        0,
+                        0
+                    ],
+                    "placeholderSize": [
+                        400,
+                        0.1,
+                        400
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        0,
+                        -1.7,
+                        0
+                    ],
+                    "type": "3d"
+                },
+                "id": "0018"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "Light"
+                    ],
+                    "dataLocation": "./assets/sky/shanghai_riverside_2k.exr",
+                    "dataType": "exr",
+                    "layers": [
+                        "light"
+                    ],
+                    "name": "light",
+                    "type": "lighting"
+                },
+                "id": "0019"
+            },
+            {
+                "card": {
+                    "color": 12303291,
+                    "cornerRadius": 0.05,
+                    "depth": 0.05,
+                    "frameColor": 13421772,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "image card",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "textureLocation": "./assets/images/CroquetLogo_RGB.jpg",
+                    "textureType": "image",
+                    "translation": [
+                        12,
+                        0.6,
+                        -10
+                    ],
+                    "type": "2d"
+                },
+                "id": "0020"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "BouncingBall"
+                    ],
+                    "color": 16777215,
+                    "dataLocation": "./assets/SVG/full-circle.svg",
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "fullBright": true,
+                    "height": 1,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "bouncinglogo",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        3,
+                        3,
+                        3
+                    ],
+                    "textureHeight": 1024,
+                    "textureType": "dynamic",
+                    "textureWidth": 1024,
+                    "translation": [
+                        12,
+                        0.6,
+                        11
+                    ],
+                    "type": "2d",
+                    "width": 1
+                },
+                "id": "0021"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "Elected",
+                        "BitcoinTracker"
+                    ],
+                    "cornerRadius": 0.1,
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "height": 0.75,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "bitcointracker",
+                    "rotation": [
+                        0,
+                        0,
+                        0,
+                        1
+                    ],
+                    "scale": [
+                        3,
+                        3,
+                        3
+                    ],
+                    "textureHeight": 768,
+                    "textureType": "canvas",
+                    "textureWidth": 1024,
+                    "translation": [
+                        -5,
+                        0.6,
+                        -16.87
+                    ],
+                    "type": "2d",
+                    "width": 1
+                },
+                "id": "0022"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "BitLogo"
+                    ],
+                    "color": 16777215,
+                    "dataLocation": "./assets/SVG/BitcoinSign.svg",
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "bitlogo",
+                    "parent": "0022",
+                    "scale": [
+                        0.25,
+                        0.25,
+                        0.25
+                    ],
+                    "translation": [
+                        -0.35,
+                        0.35,
+                        0.1
+                    ],
+                    "type": "2d"
+                },
+                "id": "0023"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "BarGraph"
+                    ],
+                    "color": 15658734,
+                    "frameColor": 8947848,
+                    "height": 0.5,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "length": 20,
+                    "name": "bar graph",
+                    "parent": "0022",
+                    "translation": [
+                        0,
+                        -0.3,
+                        0.1
+                    ],
+                    "type": "object",
+                    "values": [
+                        20890.68,
+                        20894.8,
+                        20894.4,
+                        20899.19,
+                        20890.21,
+                        20895.34,
+                        20892.77,
+                        20896.61,
+                        20905.25,
+                        20905.16,
+                        20904.12,
+                        20902.65,
+                        20902.02,
+                        20902.86,
+                        20907.8,
+                        20915.55,
+                        20907.49449826,
+                        20919.55,
+                        20918.59,
+                        20914.19
+                    ]
+                },
+                "id": "0024"
+            },
+            {
+                "card": {
+                    "backgroundColor": 16048214,
+                    "className": "TextFieldActor",
+                    "color": 65535,
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "height": 2,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "margins": {
+                        "bottom": 20,
+                        "left": 20,
+                        "right": 20,
+                        "top": 20
+                    },
+                    "name": "text editor",
+                    "rotation": [
+                        0,
+                        0,
+                        0,
+                        1
+                    ],
+                    "runs": [
+                        {
+                            "text": "\nWelcome to the Croquet Gallery!\n\nPlease sign our guest book.\n\n- Ward Cunningham\n- Ralf Barkow\n"
+                        },
+                        {
+                            "text": ""
+                        }
+                    ],
+                    "shadow": true,
+                    "textScale": 0.002,
+                    "translation": [
+                        5.5,
+                        0.4,
+                        -16.87
+                    ],
+                    "type": "text",
+                    "width": 2
+                },
+                "id": "0025"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "OpenRefineryPortalButton"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "portal button",
+                    "translation": [
+                        -12.1,
+                        1.3,
+                        -10.17839395666378
+                    ],
+                    "type": "object"
+                },
+                "id": "0026"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/22.05.23 Croquet AWE Presentation.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/22.05.23 Croquet AWE Presentation.pdf",
+                    "pdfLocation": "30zU7vniWF26Egbynrz8yyHD0fxWZ_FQC2-_h4Aqo768WEREQEMKHx9WWVxVQx5FQx5TQl9BRVVEHllfH0Ufd1RmUklceUNxW2FTcmhUA3dIUUZJR2V7Z2lpAh9ZXx5TQl9BRVVEHl1ZU0JfRlVCQ1UfHQhbQgABCXxJZERhU2kGfF5famIdWVFjeQUESV9de3p0AG9dCQRUd2NpeR9UUURRHwUJXmlkSmdpeWUFeVZIAAdBAXl3fGBYXgZDWWVvdGcJVVt8d19FdgMBUVM",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        11.914606500892997,
+                        0.4,
+                        0.25
+                    ],
+                    "type": "2d"
+                },
+                "id": "0027"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "Rapier",
+                        "Pendulum"
+                    ],
+                    "color": 11167334,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "pendulum",
+                    "scale": [
+                        0.2,
+                        0.2,
+                        0.2
+                    ],
+                    "translation": [
+                        -0.03701975732147922,
+                        3.2368919013826734,
+                        8.444841625884546
+                    ],
+                    "type": "object"
+                },
+                "id": "0028"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PendulumLink"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "parent": "0028",
+                    "pendulumProto": true,
+                    "type": "object"
+                },
+                "id": "0029"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/ADA062925.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/ADA062925.pdf",
+                    "pdfLocation": "354SVBbrwwpeK5SpsnYNrf1juA5BcAtqy8m9nhfT-1QsXUFBRUYPGhpTXFlQRhtARhtWR1pEQFBBG1xaGkAaT1EDBk95BGdxYFNHeV9ddnBTRWYDXnJPAGwCBhpWWlgbWFAbR1RZUxtXVEdeWkIbWFxWR1pDUEdGUBoGeVN3UgZ7Anh4Yl19GEAFWEBEXkJ3cG1kAmpGbG9RVkZwbVheYgJUUndkGlFUQVQaWltAZGJDRUVHYXoFZGZQU1JiUUZZbUZbRH1PAnkFTFRXU30ABXZjA1tUQg",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        -4,
+                        -3.8073204741280153,
+                        -6.9665257669409755
+                    ],
+                    "type": "2d"
+                },
+                "id": "0030"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/ADA062925.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/ADA062925.pdf",
+                    "pdfLocation": "354SVBbrwwpeK5SpsnYNrf1juA5BcAtqy8m9nhfT-1QsXUFBRUYPGhpTXFlQRhtARhtWR1pEQFBBG1xaGkAaT1EDBk95BGdxYFNHeV9ddnBTRWYDXnJPAGwCBhpWWlgbWFAbR1RZUxtXVEdeWkIbWFxWR1pDUEdGUBoGeVN3UgZ7Anh4Yl19GEAFWEBEXkJ3cG1kAmpGbG9RVkZwbVheYgJUUndkGlFUQVQaWltAZGJDRUVHYXoFZGZQU1JiUUZZbUZbRH1PAnkFTFRXU30ABXZjA1tUQg",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        -4.000000000000002,
+                        -4.39461365566456,
+                        -5.399369893055928
+                    ],
+                    "type": "2d"
+                },
+                "id": "0031"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PendulumLink"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "parent": "0028",
+                    "pendulumProto": true,
+                    "type": "object"
+                },
+                "id": "0032"
+            },
+            {
+                "card": {
+                    "dataLocation": "35lASGjUyNSQPoT63ul8AcdUwr-rtUvBnfWcd8XvaxuIXUFBRUYPGhpTXFlQRhtARhtWR1pEQFBBG1xaGkAaT1EDBk95BGdxYFNHeV9ddnBTRWYDXnJPAGwCBhpWWlgbWFAbR1RZUxtXVEdeWkIbWFxWR1pDUEdGUBoGeVN3UgZ7Anh4Yl19GEAFWEBEXkJ3cG1kAmpGbG9RVkZwbVheYgJUUndkGlFUQVQaXFlMfHkHVFxydg1aZXZycEZvY3wFUE8HVkZdTGN5A0JMelBkQgBlQVdwAQ",
+                    "dataScale": [
+                        0.08293799555452344,
+                        0.08293799555452344,
+                        0.08293799555452344
+                    ],
+                    "fileName": "/ellipsoid.glb",
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "glb",
+                    "name": "/ellipsoid.glb",
+                    "rotation": [
+                        0,
+                        -0.9977121550788421,
+                        0,
+                        0.0676051448333056
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        -1.821212047900665,
+                        -0.42176715453143543,
+                        -2.2771096851221744
+                    ],
+                    "type": "3d"
+                },
+                "id": "0033"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PendulumLink"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "parent": "0028",
+                    "pendulumProto": true,
+                    "type": "object"
+                },
+                "id": "0034"
+            },
+            {
+                "card": {
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "entrance",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "spawn": "default",
+                    "translation": [
+                        -12,
+                        -0.4,
+                        -10.2
+                    ],
+                    "type": "object"
+                },
+                "id": "0035"
+            },
+            {
+                "card": {
+                    "dataLocation": "./assets/3D/artgallery_042122.glb.zip",
+                    "dataScale": [
+                        1,
+                        1,
+                        1
+                    ],
+                    "layers": [
+                        "walk"
+                    ],
+                    "name": "world model",
+                    "placeholder": true,
+                    "placeholderColor": 8421504,
+                    "placeholderOffset": [
+                        0,
+                        0,
+                        0
+                    ],
+                    "placeholderSize": [
+                        400,
+                        0.1,
+                        400
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        0,
+                        -1.7,
+                        0
+                    ],
+                    "type": "3d"
+                },
+                "id": "0036"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "Light"
+                    ],
+                    "dataLocation": "./assets/sky/shanghai_riverside_2k.exr",
+                    "dataType": "exr",
+                    "layers": [
+                        "light"
+                    ],
+                    "name": "light",
+                    "type": "lighting"
+                },
+                "id": "0037"
+            },
+            {
+                "card": {
+                    "color": 12303291,
+                    "cornerRadius": 0.05,
+                    "depth": 0.05,
+                    "frameColor": 13421772,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "image card",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "textureLocation": "./assets/images/CroquetLogo_RGB.jpg",
+                    "textureType": "image",
+                    "translation": [
+                        12,
+                        0.6,
+                        -10
+                    ],
+                    "type": "2d"
+                },
+                "id": "0038"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "BouncingBall"
+                    ],
+                    "color": 16777215,
+                    "dataLocation": "./assets/SVG/full-circle.svg",
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "fullBright": true,
+                    "height": 1,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "bouncinglogo",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        3,
+                        3,
+                        3
+                    ],
+                    "textureHeight": 1024,
+                    "textureType": "dynamic",
+                    "textureWidth": 1024,
+                    "translation": [
+                        12,
+                        0.6,
+                        11
+                    ],
+                    "type": "2d",
+                    "width": 1
+                },
+                "id": "0039"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "Elected",
+                        "BitcoinTracker"
+                    ],
+                    "cornerRadius": 0.1,
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "height": 0.75,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "bitcointracker",
+                    "rotation": [
+                        0,
+                        0,
+                        0,
+                        1
+                    ],
+                    "scale": [
+                        3,
+                        3,
+                        3
+                    ],
+                    "textureHeight": 768,
+                    "textureType": "canvas",
+                    "textureWidth": 1024,
+                    "translation": [
+                        -5,
+                        0.6,
+                        -16.87
+                    ],
+                    "type": "2d",
+                    "width": 1
+                },
+                "id": "0040"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "BitLogo"
+                    ],
+                    "color": 16777215,
+                    "dataLocation": "./assets/SVG/BitcoinSign.svg",
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "bitlogo",
+                    "parent": "0040",
+                    "scale": [
+                        0.25,
+                        0.25,
+                        0.25
+                    ],
+                    "translation": [
+                        -0.35,
+                        0.35,
+                        0.1
+                    ],
+                    "type": "2d"
+                },
+                "id": "0041"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "BarGraph"
+                    ],
+                    "color": 15658734,
+                    "frameColor": 8947848,
+                    "height": 0.5,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "length": 20,
+                    "name": "bar graph",
+                    "parent": "0040",
+                    "translation": [
+                        0,
+                        -0.3,
+                        0.1
+                    ],
+                    "type": "object",
+                    "values": [
+                        20890.68,
+                        20894.8,
+                        20894.4,
+                        20899.19,
+                        20890.21,
+                        20895.34,
+                        20892.77,
+                        20896.61,
+                        20905.25,
+                        20905.16,
+                        20904.12,
+                        20902.65,
+                        20902.02,
+                        20902.86,
+                        20907.8,
+                        20915.55,
+                        20907.49449826,
+                        20919.55,
+                        20918.59,
+                        20914.19
+                    ]
+                },
+                "id": "0042"
+            },
+            {
+                "card": {
+                    "backgroundColor": 16048214,
+                    "className": "TextFieldActor",
+                    "color": 65535,
+                    "depth": 0.05,
+                    "frameColor": 8947848,
+                    "height": 2,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "margins": {
+                        "bottom": 20,
+                        "left": 20,
+                        "right": 20,
+                        "top": 20
+                    },
+                    "name": "text editor",
+                    "rotation": [
+                        0,
+                        0,
+                        0,
+                        1
+                    ],
+                    "runs": [
+                        {
+                            "text": "\nWelcome to the Croquet Gallery!\n\nPlease sign our guest book.\n\n- Ward Cunningham\n- Ralf Barkow\n- Tudor Girba\n- Thompson Morrison"
+                        },
+                        {
+                            "text": ""
+                        }
+                    ],
+                    "shadow": true,
+                    "textScale": 0.002,
+                    "translation": [
+                        5.5,
+                        0.4,
+                        -16.87
+                    ],
+                    "type": "text",
+                    "width": 2
+                },
+                "id": "0043"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "OpenRefineryPortalButton"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "portal button",
+                    "translation": [
+                        -12.1,
+                        1.3,
+                        -10.17839395666378
+                    ],
+                    "type": "object"
+                },
+                "id": "0044"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/22.05.23 Croquet AWE Presentation.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/22.05.23 Croquet AWE Presentation.pdf",
+                    "pdfLocation": "30zU7vniWF26Egbynrz8yyHD0fxWZ_FQC2-_h4Aqo768WEREQEMKHx9WWVxVQx5FQx5TQl9BRVVEHllfH0Ufd1RmUklceUNxW2FTcmhUA3dIUUZJR2V7Z2lpAh9ZXx5TQl9BRVVEHl1ZU0JfRlVCQ1UfHQhbQgABCXxJZERhU2kGfF5famIdWVFjeQUESV9de3p0AG9dCQRUd2NpeR9UUURRHwUJXmlkSmdpeWUFeVZIAAdBAXl3fGBYXgZDWWVvdGcJVVt8d19FdgMBUVM",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        11.914606500892997,
+                        0.4,
+                        0.25
+                    ],
+                    "type": "2d"
+                },
+                "id": "0045"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "Rapier",
+                        "Pendulum"
+                    ],
+                    "color": 11167334,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "name": "pendulum",
+                    "scale": [
+                        0.2,
+                        0.2,
+                        0.2
+                    ],
+                    "translation": [
+                        -0.03701975732147922,
+                        3.2368919013826734,
+                        8.444841625884546
+                    ],
+                    "type": "object"
+                },
+                "id": "0046"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PendulumLink"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "parent": "0046",
+                    "pendulumProto": true,
+                    "type": "object"
+                },
+                "id": "0047"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/ADA062925.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/ADA062925.pdf",
+                    "pdfLocation": "354SVBbrwwpeK5SpsnYNrf1juA5BcAtqy8m9nhfT-1QsXUFBRUYPGhpTXFlQRhtARhtWR1pEQFBBG1xaGkAaT1EDBk95BGdxYFNHeV9ddnBTRWYDXnJPAGwCBhpWWlgbWFAbR1RZUxtXVEdeWkIbWFxWR1pDUEdGUBoGeVN3UgZ7Anh4Yl19GEAFWEBEXkJ3cG1kAmpGbG9RVkZwbVheYgJUUndkGlFUQVQaWltAZGJDRUVHYXoFZGZQU1JiUUZZbUZbRH1PAnkFTFRXU30ABXZjA1tUQg",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        -4,
+                        -3.8073204741280153,
+                        -6.9665257669409755
+                    ],
+                    "type": "2d"
+                },
+                "id": "0048"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/ADA062925.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/ADA062925.pdf",
+                    "pdfLocation": "354SVBbrwwpeK5SpsnYNrf1juA5BcAtqy8m9nhfT-1QsXUFBRUYPGhpTXFlQRhtARhtWR1pEQFBBG1xaGkAaT1EDBk95BGdxYFNHeV9ddnBTRWYDXnJPAGwCBhpWWlgbWFAbR1RZUxtXVEdeWkIbWFxWR1pDUEdGUBoGeVN3UgZ7Anh4Yl19GEAFWEBEXkJ3cG1kAmpGbG9RVkZwbVheYgJUUndkGlFUQVQaWltAZGJDRUVHYXoFZGZQU1JiUUZZbUZbRH1PAnkFTFRXU30ABXZjA1tUQg",
+                    "rotation": [
+                        0,
+                        -0.7071067811865475,
+                        0,
+                        0.7071067811865476
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        -4.000000000000002,
+                        -4.39461365566456,
+                        -5.399369893055928
+                    ],
+                    "type": "2d"
+                },
+                "id": "0049"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/Steele und Sussman - 1978 - The Art of the Interpreter or the Modularity Compl.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/Steele und Sussman - 1978 - The Art of the Interpreter or the Modularity Compl.pdf",
+                    "pdfLocation": "3mxR_H1VXfD_JdbcnaYIWliISB4C2X_lKs8-icLOKepMBRkZHR5XQkILBAEIHkMYHkMOHwIcGAgZQwQCQhhCFwlbXhchXD8pOAsfIQcFLigLHT5bBioXWDRaXkIOAgBDAAhDHwwBC0MPDB8GAhpDAAQOHwIbCB8eCEJeIQsvCl4jWiAgOgUlQBhdABgcBhovKDU8WjIeNDcJDh4oNQAGOloMCi88QgkMGQxCIAcIPB4cPhgLDlgJAFwePCwuClwBDz9fBD0XXjtdIA4jHlsqAl80Dx05KA",
+                    "rotation": [
+                        0,
+                        0.5064913673098383,
+                        0,
+                        -0.8622450317865626
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        2.345783907901467,
+                        0.5694115793857282,
+                        -4.537398846553307
+                    ],
+                    "type": "2d"
+                },
+                "id": "0050"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PDFView"
+                    ],
+                    "color": 8947848,
+                    "depth": 0.05,
+                    "fileName": "/sigmod18.pdf",
+                    "frameColor": 16777215,
+                    "fullBright": true,
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "pdf",
+                    "name": "/sigmod18.pdf",
+                    "pdfLocation": "3KXenoMfmj_uiMiS9WeKoft1sPI42cTZxZePzh08Yfp0Iz8_OzhxZGQtIicuOGU-OGUoOSQ6Pi4_ZSIkZD5kMS99eDEHehkPHi05ByEjCA4tOxh9IAwxfhJ8eGQoJCZlJi5lOSonLWUpKjkgJDxlJiIoOSQ9Ljk4LmR4By0JLHgFfAYGHCMDZj57Jj46IDwJDhMafBQ4EhEvKDgOEyYgHHwqLAkaZC8qPypkERgoFCYxEQhmKXkIGSU7Ln0RBhEkDgw4PXsHGgd_CBE_CCgOJXIGDBwZLA",
+                    "rotation": [
+                        0,
+                        0.8837387010885343,
+                        0,
+                        0.4679806707529173
+                    ],
+                    "scale": [
+                        4,
+                        4,
+                        4
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        2.4562354461993476,
+                        0.5733946953443396,
+                        -4.603876427850644
+                    ],
+                    "type": "2d"
+                },
+                "id": "0051"
+            },
+            {
+                "card": {
+                    "dataLocation": "3nkKksmUiy1izOGftJoiihyCXL2VOCSaBrSwPKCgPT-kBhoaHh1UQUEIBwILHUAbHUANHAEfGwsaQAcBQRtBFApYXRQiXzwqOwgcIgQGLSsIHj1YBSkUWzdZXUENAQNAAwtAHA8CCEAMDxwFARlAAwcNHAEYCxwdC0FdIggsCV0gWSMjOQYmQxteAxsfBRksKzY_WTEdNzQKDR0rNgMFOVkPCSw_QQoPGg9BWRgNBgAXDxpbWDQtICRdOj8KGR8nHTY5WR4LLA8UMRoCGSA7JwIEIgAxKw",
+                    "dataScale": [
+                        0.005369230966419744,
+                        0.005369230966419744,
+                        0.005369230966419744
+                    ],
+                    "fileName": "/2CylinderEngine.glb",
+                    "layers": [
+                        "pointer"
+                    ],
+                    "modelType": "glb",
+                    "name": "/2CylinderEngine.glb",
+                    "rotation": [
+                        0,
+                        -0.47325013813552613,
+                        0,
+                        0.8809280939751584
+                    ],
+                    "shadow": true,
+                    "singleSided": true,
+                    "translation": [
+                        5.349584503478688,
+                        -0.06711931454214048,
+                        14.70613070472925
+                    ],
+                    "type": "3d"
+                },
+                "id": "0052"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PendulumLink"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "parent": "0046",
+                    "pendulumProto": true,
+                    "type": "object"
+                },
+                "id": "0053"
+            },
+            {
+                "card": {
+                    "behaviorModules": [
+                        "PendulumLink"
+                    ],
+                    "layers": [
+                        "pointer"
+                    ],
+                    "parent": "0046",
+                    "pendulumProto": true,
+                    "type": "object"
+                },
+                "id": "0054"
+            }
+        ],
+        "useRapier": true
+    }
+}
